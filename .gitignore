@@ -1,0 +1,23 @@
+# 凭据与本地配置
+.env
+.env.*
+!.env.example
+
+# 编辑器与 Python 运行产物
+.idea/
+.vscode/
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# 后续本地业务数据与构建产物
+data/
+logs/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+build/
+dist/

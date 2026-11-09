@@ -1,0 +1,9 @@
+# 第一课运行依赖；当前已验证兼容 conda Jun / Python 3.10。
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+pydantic>=2.7,<3
+python-dotenv>=1.0,<2
+SQLAlchemy>=2.0,<3
+httpx>=0.27,<1
+argon2-cffi>=25.1,<26
+Pillow>=12.3,<13

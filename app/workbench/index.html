@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>销售工作台 · SalesAIbot</title>
+  <link rel="stylesheet" href="./workbench.css?v=3">
+  <script src="./screenshot-import.js?v=2" defer></script>
+  <script src="./suggestion-outcome.js?v=1" defer></script>
+  <script src="./workbench.js?v=4" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">S</span>
+      <span>SalesAIbot</span>
+    </div>
+    <span id="environment" class="environment">本地工作台</span>
+    <div id="account-controls" class="account-controls" hidden>
+      <span id="operator-name" class="operator-name"></span>
+      <button id="logout" type="button" class="logout-button">退出登录</button>
+    </div>
+  </header>
+
+  <main id="auth-panel" class="auth-shell">
+    <section class="panel auth-card" aria-labelledby="login-heading">
+      <h1 id="login-heading">登录销售工作台</h1>
+      <p id="auth-feedback" class="feedback auth-feedback" role="status">正在检查登录状态…</p>
+      <form id="login-form" class="workbench-form login-form" hidden>
+        <label for="login-username">用户名</label>
+        <input id="login-username" name="username" autocomplete="username" required>
+        <label for="login-password">密码</label>
+        <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+        <button id="login-submit" class="primary-button" type="submit">登录</button>
+      </form>
+    </section>
+  </main>
+
+  <main id="workspace" class="workspace" hidden>
+    <aside class="sidebar panel" aria-labelledby="conversation-heading">
+      <div class="sidebar-heading">
+        <h2 id="conversation-heading">我的会话</h2>
+        <span id="conversation-count" class="count" aria-label="会话数量">0</span>
+      </div>
+      <p id="conversation-empty" class="empty">正在加载会话…</p>
+      <ul id="conversation-list" class="conversation-list" aria-label="我的会话列表"></ul>
+      <form id="conversation-form" class="workbench-form new-conversation">
+        <label for="new-customer-name">新建会话</label>
+        <input id="new-customer-name" placeholder="输入客户名称" required>
+        <button id="create-conversation" class="primary-button" type="submit" disabled>创建会话</button>
+        <p id="conversation-feedback" class="feedback" role="status" hidden></p>
+      </form>
+    </aside>
+
+    <div class="detail">
+      <div class="page-heading">
+        <h1>销售工作台</h1>
+        <button id="refresh" class="refresh" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.4 6M20 5v6h-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          刷新
+        </button>
+      </div>
+      <div class="context panel">
+        <h2 id="customer-name">会话详情</h2>
+        <span id="conversation-version" class="version" hidden></span>
+        <span id="assistance-status" class="version assistance-status" hidden></span>
+        <button id="toggle-assistance" class="secondary-button" type="button" hidden disabled>暂停 AI 建议</button>
+        <p id="assistance-feedback" class="feedback assistance-feedback" role="status" hidden></p>
+      </div>
+      <p id="status" class="status" role="status">正在连接工作台…</p>
+      <p id="logout-feedback" class="feedback status" role="status" hidden></p>
+
+      <details id="screenshot-import" class="panel screenshot-panel" hidden>
+        <summary class="section-heading">截图识别</summary>
+        <div class="workbench-form">
+          <label for="screenshot-file">选择聊天截图</label>
+          <input id="screenshot-file" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" autocomplete="off" aria-describedby="screenshot-help">
+          <p id="screenshot-help" class="feedback">支持 PNG 和 JPEG，最大 5 MiB。实时模式下，点击「识别截图」会将截图提交给已配置的视觉模型。</p>
+          <img id="screenshot-preview" class="screenshot-preview" alt="聊天截图预览" hidden>
+          <div class="actions">
+            <button id="screenshot-transcribe" class="primary-button" type="button" disabled>识别截图</button>
+            <button id="screenshot-clear" class="secondary-button" type="button" disabled>清除截图</button>
+          </div>
+          <section id="screenshot-candidates" class="screenshot-candidates" aria-labelledby="screenshot-candidates-heading" hidden>
+            <h3 id="screenshot-candidates-heading">转录候选</h3>
+            <p id="screenshot-confirm-help" class="feedback">请逐条核对角色和正文。全部确认后，导入会将这些文字保存到「实际消息」。</p>
+            <ol id="screenshot-lines" class="screenshot-lines"></ol>
+            <div class="actions suggestion-actions">
+              <button id="screenshot-confirm" class="primary-button" type="button" aria-describedby="screenshot-confirm-help" disabled>确认导入</button>
+            </div>
+          </section>
+          <p id="screenshot-feedback" class="feedback" role="status" hidden></p>
+        </div>
+      </details>
+
+      <div class="detail-panels">
+        <section class="panel" aria-labelledby="messages-heading">
+          <header class="section-heading">
+            <h2 id="messages-heading">实际消息</h2>
+            <span id="message-count" class="count" aria-label="消息数量">0</span>
+          </header>
+          <p id="messages-empty" class="empty">选择会话后查看消息。</p>
+          <ol id="messages" class="cards"></ol>
+          <form id="message-form" class="workbench-form message-form" hidden>
+            <label for="message-actor">补录实际消息</label>
+            <select id="message-actor">
+              <option value="customer">客户原话</option>
+              <option value="human">人工销售 · 已发原文</option>
+            </select>
+            <label id="message-source-label" for="message-source" hidden>关联原建议（选填）</label>
+            <select id="message-source" hidden disabled>
+              <option value="">不关联建议</option>
+            </select>
+            <textarea id="customer-message" rows="3" aria-label="实际消息正文" placeholder="粘贴或输入客户原话" required></textarea>
+            <button id="save-message" class="primary-button" type="submit" disabled>保存消息</button>
+            <p id="message-feedback" class="feedback" role="status" hidden></p>
+          </form>
+        </section>
+
+        <section class="panel" aria-labelledby="suggestions-heading">
+          <header class="section-heading">
+            <h2 id="suggestions-heading">回复建议</h2>
+            <span id="suggestion-count" class="count" aria-label="建议数量">0</span>
+          </header>
+          <form id="generation-form" class="workbench-form generation-form" hidden>
+            <label id="product-label" for="product-select">课程</label>
+            <select id="product-select" disabled></select>
+            <input id="product-id" placeholder="例如 demo_python_basic" hidden>
+            <p id="product-hint" class="feedback" hidden></p>
+            <div class="actions">
+              <button id="generate-suggestion" class="primary-button" type="submit" disabled>生成建议</button>
+              <button id="check-generation" class="secondary-button" type="button" hidden>查询生成状态</button>
+            </div>
+            <p id="generation-feedback" class="feedback" role="status" hidden></p>
+          </form>
+          <p id="suggestions-empty" class="empty">选择会话后查看建议。</p>
+          <ul id="suggestions" class="cards"></ul>
+        </section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
