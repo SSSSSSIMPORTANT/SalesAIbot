@@ -7,23 +7,41 @@ ReplyTopic = Literal[
     "price",
     "trial",
     "refund",
+    "refund_request",
+    "complaint",
+    "payment_dispute",
     "audience",
     "curriculum",
     "other",
 ]
 
+ReplyResultTopic = ReplyTopic | Literal["product_clarification"]
+HandoffReason = Literal[
+    "refund_request", "complaint", "payment_dispute", "model_unavailable", "other"
+]
+RISK_TOPICS = ("refund_request", "payment_dispute", "complaint")
+HANDOFF_REPLIES = {
+    "refund_request": "请联系人工客服核实订单和退款条件，由人工处理退款申请。",
+    "payment_dispute": "请联系人工客服核实订单和付款记录，由人工处理这笔付款问题。",
+    "complaint": "这件事需要人工客服进一步核实和处理，请联系人工客服说明情况。",
+}
+
 
 def render_business_reply(
     *,
     product: ProductKnowledge | None,
-    topics: list[ReplyTopic],
+    topics: list[ReplyResultTopic],
 ) -> str:
     """只使用资料中已有的事实生成业务回复。"""
 
     if not topics:
         raise ValueError("At least one reply topic is required")
 
-    if product is None:
+    for topic in RISK_TOPICS:
+        if topic in topics:
+            return HANDOFF_REPLIES[topic]
+
+    if "product_clarification" in topics or product is None:
         return "请先确认您想了解哪门课程，再核实相关信息。"
 
     price = (

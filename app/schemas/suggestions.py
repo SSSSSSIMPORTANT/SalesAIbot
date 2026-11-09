@@ -14,7 +14,7 @@ class SuggestionResponse(BaseModel):
     id: str
     conversation_id: str
     based_on_version: int
-    product_id: str
+    product_id: str | None
     reply_text: str
     generation_snapshot: ReplyPreviewResponse
     created_at: str
@@ -50,7 +50,7 @@ class GenerationRequestResponse(BaseModel):
     conversation_id: str
     request_key: str
     based_on_version: int
-    product_id: str
+    product_id: str | None
     status: Literal["running", "succeeded", "failed"]
     suggestion_id: str | None
     error_code: str | None

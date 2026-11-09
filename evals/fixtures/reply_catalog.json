@@ -1,0 +1,26 @@
+{
+  "products": [
+    {
+      "knowledge_id": "demo-terms-a",
+      "revision": "v1",
+      "product_id": "demo_python_basic",
+      "name": "合成 Python 基础课",
+      "status": "published",
+      "price_cents": 19900,
+      "trial_available": null,
+      "refund_policy": null,
+      "source": "合成测试资料，仅供开发验证"
+    },
+    {
+      "knowledge_id": "demo-terms-b",
+      "revision": "v1",
+      "product_id": "demo_python_project",
+      "name": "合成 Python 项目课",
+      "status": "draft",
+      "price_cents": 39900,
+      "trial_available": null,
+      "refund_policy": null,
+      "source": "合成测试资料，仅供开发验证"
+    }
+  ]
+}

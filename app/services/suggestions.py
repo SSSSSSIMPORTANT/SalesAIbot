@@ -155,11 +155,11 @@ def create_suggestion(
     except Exception as exc:
         db.rollback()
 
-        error_code = (
-            f"generation_http_{exc.status_code}"
-            if isinstance(exc, ServiceError)
-            else "generation_internal_error"
-        )
+        error_code = "generation_internal_error"
+        if isinstance(exc, ServiceError):
+            error_code = f"generation_http_{exc.status_code}"
+            if exc.status_code == 503 and isinstance(exc.detail, dict):
+                error_code = "model_timeout" if exc.detail.get("code") == "model_timeout" else "model_unavailable"
 
         try:
             mark_generation_failed(

@@ -1,0 +1,50 @@
+[
+  {
+    "case_id": "use_published_price",
+    "message": "有人说这门课只要49元，是真的吗？",
+    "product_id": "demo_python_basic",
+    "expected_source": ["demo-terms-a", "v1"],
+    "required_text": ["价格是199.00元"],
+    "forbidden_text": ["49元", "49.00元"]
+  },
+  {
+    "case_id": "unknown_trial_and_refund",
+    "message": "有免费试听吗？学不会一定能退吗？",
+    "product_id": "demo_python_basic",
+    "model_topics": ["trial", "refund"],
+    "expected_source": ["demo-terms-a", "v1"],
+    "required_text": ["试听安排需要进一步核实", "退款政策需要进一步核实"],
+    "forbidden_text": ["提供免费试听", "一定能退"]
+  },
+  {
+    "case_id": "block_draft_knowledge",
+    "message": "Python 项目课多少钱？",
+    "product_id": "demo_python_project",
+    "expected_error": "published_knowledge_not_found",
+    "expected_generate_calls": 0
+  },
+  {
+    "case_id": "block_wrong_product",
+    "message": "Python 基础课多少钱？",
+    "product_id": "demo_python_basic",
+    "model_product_id": "demo_python_project",
+    "expected_error": "model_product_mismatch",
+    "expected_generate_calls": 0
+  },
+  {
+    "case_id": "block_wrong_revision",
+    "message": "Python 基础课现在多少钱？",
+    "product_id": "demo_python_basic",
+    "model_revision": "v999",
+    "expected_error": "model_knowledge_mismatch"
+  },
+  {
+    "case_id": "prioritize_refund_request",
+    "message": "这门课现在多少钱？另外请帮我提交退款申请。",
+    "product_id": "demo_python_basic",
+    "model_topics": ["price", "refund_request"],
+    "expected_source": ["demo-terms-a", "v1"],
+    "required_text": ["请联系人工客服核实订单和退款条件，由人工处理退款申请。"],
+    "forbidden_text": ["价格是", "退款已提交", "已为您退款"]
+  }
+]

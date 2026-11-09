@@ -349,9 +349,9 @@ class ReplySuggestion(Base):
         nullable=False,
     )
 
-    product_id: Mapped[str] = mapped_column(
+    product_id: Mapped[str | None] = mapped_column(
         String(100),
-        nullable=False,
+        nullable=True,
     )
 
     reply_text: Mapped[str] = mapped_column(
@@ -459,9 +459,9 @@ class SuggestionGenerationRequest(Base):
         nullable=False,
     )
 
-    product_id: Mapped[str] = mapped_column(
+    product_id: Mapped[str | None] = mapped_column(
         String(100),
-        nullable=False,
+        nullable=True,
     )
 
     status: Mapped[str] = mapped_column(
@@ -508,6 +508,41 @@ class SuggestionAbandonment(Base):
         nullable=False,
         default=lambda: datetime.now(timezone.utc).isoformat(),
     )
+
+
+class HumanHandoff(Base):
+    __tablename__ = "human_handoffs"
+    __table_args__ = (
+        CheckConstraint(
+            "reason IN ('refund_request', 'complaint', 'payment_dispute', "
+            "'model_unavailable', 'other')",
+            name="ck_handoff_reason",
+        ),
+        CheckConstraint(
+            "(resolved_at IS NULL AND resolved_by_operator_id IS NULL AND resolution IS NULL)"
+            " OR (resolved_at IS NOT NULL AND resolved_by_operator_id IS NOT NULL "
+            "AND resolution IS NOT NULL)",
+            name="ck_handoff_resolution",
+        ),
+    )
+
+    source_message_id: Mapped[int] = mapped_column(
+        ForeignKey("messages.id"), primary_key=True, autoincrement=False
+    )
+    reason: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_by_operator_id: Mapped[str] = mapped_column(
+        ForeignKey("operator_accounts.id"), nullable=False
+    )
+    created_at: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc).isoformat(),
+    )
+    resolved_by_operator_id: Mapped[str | None] = mapped_column(
+        ForeignKey("operator_accounts.id"), nullable=True
+    )
+    resolved_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    resolution: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 def get_db():

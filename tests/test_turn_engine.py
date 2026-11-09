@@ -90,3 +90,65 @@ def test_engine_enforces_business_rules(
     assert "只收99元" not in reply.text
     assert "未提供适合人群" in reply.text
     assert reply.knowledge_revision == "v1"
+
+
+@pytest.mark.parametrize(("topics", "draft", "source"), [
+    (
+        ["price", "trial"],
+        "理解你想先体验再决定。\n[[PRICE_FACT]]\n[[TRIAL_FACT]]",
+        "model",
+    ),
+    (["price", "trial"], "理解你的顾虑。\n[[PRICE_FACT]]", "template"),
+    (["price", "trial"], "[[PRICE_FACT]]\n[[TRIAL_FACT]]", "template"),
+    (
+        ["price", "trial"],
+        "理解你担心跟不上，零基础学员我们也有配套支持。\n[[PRICE_FACT]]\n[[TRIAL_FACT]]",
+        "template",
+    ),
+    (["price"], "今天只收49元。\n[[PRICE_FACT]]", "template"),
+    (["trial"], "可以免费试听。\n[[TRIAL_FACT]]", "template"),
+    (["price", "refund_request"], "先看看价格。\n[[PRICE_FACT]]", "template"),
+])
+def test_engine_validates_model_written_reply(monkeypatch, topics, draft, source):
+    product = ProductKnowledge(
+        knowledge_id="test-terms",
+        revision="v1",
+        product_id="test-product",
+        name="合成测试课程",
+        status="published",
+        price_cents=19900,
+        source="合成测试资料",
+    )
+    gateway = StubGateway("v1")
+
+    def generate(**kwargs):
+        return ModelPlan(
+            draft=ReplyDraft(
+                topics=topics,
+                knowledge_id=product.knowledge_id,
+                knowledge_revision=product.revision,
+                reply_text=draft,
+            ),
+            model_name="stub",
+            mode="mock",
+        )
+
+    monkeypatch.setattr(gateway, "generate", generate)
+    reply = SalesTurnEngine(gateway).run(
+        messages=[ModelMessage(role="user", content="这门课多少钱？")],
+        product=product,
+    )
+
+    assert reply.text_source == source
+    assert "[[" not in reply.text
+    assert "49元" not in reply.text
+    assert "免费试听" not in reply.text
+    assert "配套支持" not in reply.text
+
+    if source == "model":
+        assert reply.text.startswith("理解你想先体验再决定。")
+        assert "199.00元" in reply.text
+        assert "试听安排需要进一步核实。" in reply.text
+    if "refund_request" in topics:
+        assert "由人工处理退款申请" in reply.text
+        assert "199.00元" not in reply.text

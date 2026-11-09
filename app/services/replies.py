@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import Conversation, Message
 from app.llm import ConfirmedFactSnapshot, ModelCallError
-from app.schemas.replies import ReplyPreviewRequest, ReplyPreviewResponse
+from app.schemas.replies import ReplyPreviewRequest, ReplyPreviewResponse, ReplyRouting
 from app.services.context import MAX_RECENT_MESSAGES, build_recent_context
 from app.services.errors import ServiceError
 from app.services.memory_recall import recall_memory
@@ -59,6 +59,7 @@ def build_reply_preview(
         )
 
     model_messages = build_recent_context(history)
+    source_message_id = history[-1].id
     recall_before = recall_memory(
         db,
         conversation_id=conversation_id,
@@ -89,9 +90,32 @@ def build_reply_preview(
         ToolExecutionError,
         TurnValidationError,
     ) as exc:
+        db.rollback()
+        current_version = db.scalar(
+            select(Conversation.version).where(Conversation.id == conversation_id)
+        )
+        if current_version != body.based_on_version:
+            raise ServiceError(
+                status_code=409, detail="Conversation changed while generating"
+            ) from exc
+        routing = ReplyRouting(
+            intents=[],
+            risk_flags=["model_unavailable"],
+            action="human_handoff",
+            handoff_reason="model_unavailable",
+        )
         raise ServiceError(
             status_code=503,
-            detail=str(exc),
+            detail={
+                "code": str(exc),
+                "message": (
+                    "模型响应超时，可重试或创建人工任务。"
+                    if str(exc) == "model_timeout"
+                    else "本轮暂时无法生成可靠建议，可重试或创建人工任务。"
+                ),
+                "source_message_id": source_message_id,
+                "routing": routing.model_dump(),
+            },
         ) from exc
 
     # 结束可能存在的读取事务，从新的读取开始检查。
@@ -127,4 +151,5 @@ def build_reply_preview(
         trace=result.trace,
         recalled_memory=list(memories),
         memory_conflicts=recall_before.conflicts,
+        source_message_id=source_message_id,
     )

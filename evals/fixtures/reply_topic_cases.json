@@ -1,0 +1,53 @@
+[
+  {
+    "case_id": "price_only_with_background",
+    "messages": [
+      {"role": "user", "content": "我完全没学过编程。这门课学费是多少？"}
+    ],
+    "expected_topics": ["price"]
+  },
+  {
+    "case_id": "trial_and_refund",
+    "messages": [
+      {"role": "user", "content": "可以先试听吗？报名后如果不合适，退款规则是什么？"}
+    ],
+    "expected_topics": ["trial", "refund"]
+  },
+  {
+    "case_id": "audience_and_curriculum",
+    "messages": [
+      {"role": "user", "content": "这门课适合完全没写过代码的人吗？主要会教哪些内容？"}
+    ],
+    "expected_topics": ["audience", "curriculum"]
+  },
+  {
+    "case_id": "latest_turn_only",
+    "messages": [
+      {"role": "user", "content": "报名后怎么退费？"},
+      {"role": "assistant", "content": "退款政策需要进一步核实。"},
+      {"role": "user", "content": "退费先不用说，我现在只想知道这门课有没有试听。"}
+    ],
+    "expected_topics": ["trial"]
+  },
+  {
+    "case_id": "explicit_refund_request",
+    "messages": [
+      {"role": "user", "content": "我已经报名了，请帮我提交这门课的退款申请。"}
+    ],
+    "expected_topics": ["refund_request"]
+  },
+  {
+    "case_id": "explicit_service_complaint",
+    "messages": [
+      {"role": "user", "content": "我已经多次反馈这门课的服务问题，请帮我正式提交投诉。"}
+    ],
+    "expected_topics": ["complaint"]
+  },
+  {
+    "case_id": "duplicate_payment_dispute",
+    "messages": [
+      {"role": "user", "content": "我报名付款时页面刷新了，银行卡上出现了两笔扣款，请查一下。"}
+    ],
+    "expected_topics": ["payment_dispute"]
+  }
+]

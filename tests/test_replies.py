@@ -91,3 +91,54 @@ def test_preview_rejects_unavailable_knowledge(client, product_id):
     assert preview.status_code == 404
     assert client.get(url).json()["version"] == 1
     assert len(client.get(f"{url}/messages").json()) == 1
+
+
+def test_explicit_refund_rule_can_be_saved_and_copied(client, monkeypatch):
+    runtime = client.app.state.runtime
+
+    def unexpected_call(*args, **kwargs):
+        pytest.fail("明确的退款办理请求应直接走服务端规则")
+
+    monkeypatch.setattr(runtime.gateway, "request_product_tool", unexpected_call)
+    monkeypatch.setattr(runtime.gateway, "generate", unexpected_call)
+    monkeypatch.setattr(runtime.tool_executor, "execute", unexpected_call)
+    monkeypatch.setattr(
+        runtime.repository, "get_current_published_product", unexpected_call
+    )
+
+    created = client.post("/conversations", json={"customer_name": "合成退款客户"})
+    assert created.status_code == 201
+    url = f"/conversations/{created.json()['id']}"
+
+    added = client.post(
+        f"{url}/messages",
+        json={
+            "request_key": "refund-rule-message",
+            "based_on_version": 0,
+            "actor": "customer",
+            "text": "请帮我办理退款。",
+        },
+    )
+    assert added.status_code == 201
+
+    body = {"based_on_version": 1, "product_id": "demo_python_basic"}
+    preview = client.post(f"{url}/reply-preview", json=body)
+    assert preview.status_code == 200
+    data = preview.json()
+    assert data["reply"]["mode"] == "rule"
+    assert data["reply"]["topics"] == ["refund_request"]
+    assert data["retrieved_knowledge"] is None
+    assert [step["step"] for step in data["trace"]] == ["rule_refund_request"]
+
+    saved = client.post(
+        f"{url}/suggestions",
+        json={**body, "request_key": "refund-rule-suggestion"},
+    )
+    assert saved.status_code == 201
+    suggestion_id = saved.json()["id"]
+
+    copied = client.post(f"{url}/suggestions/{suggestion_id}/copy-ready")
+    assert copied.status_code == 200
+    assert copied.json()["text"] == data["reply"]["text"]
+    assert client.get(url).json()["version"] == 1
+    assert len(client.get(f"{url}/messages").json()) == 1

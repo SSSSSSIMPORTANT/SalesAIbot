@@ -182,6 +182,17 @@ def test_application_gateways_and_repositories_are_isolated(
 
 def test_registered_routes_preserve_public_contract(tmp_path):
     expected = {
+        ("GET", "/conversations/{conversation_id}/handoffs", "get_handoffs"),
+        (
+            "PUT",
+            "/conversations/{conversation_id}/messages/{message_id}/handoff",
+            "put_handoff",
+        ),
+        (
+            "PUT",
+            "/conversations/{conversation_id}/messages/{message_id}/handoff/resolution",
+            "put_handoff_resolution",
+        ),
         ("GET", "/health", "health"),
         ("POST", "/auth/login", "login"),
         ("GET", "/auth/me", "get_me"),

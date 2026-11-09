@@ -1,5 +1,6 @@
 from app.knowledge import ProductKnowledge
-from app.services.reply_rendering import render_business_reply
+from app.services.model_reply_text import render_model_reply_text
+from app.services.reply_rendering import ReplyResultTopic, render_business_reply
 from app.llm import (
     ModelGateway,
     ModelMessage,
@@ -91,8 +92,43 @@ class SalesTurnResult(BaseModel):
     """一个完整回合返回的业务结果。"""
 
     reply: ModelReply
-    retrieved_knowledge: ProductKnowledge
+    retrieved_knowledge: ProductKnowledge | None
     trace: list[TurnTraceStep]
+
+
+EXPLICIT_REFUND_REQUESTS = frozenset({
+    "请帮我退款",
+    "请帮我办理退款",
+    "请帮我申请退款",
+    "请帮我提交退款申请",
+    "我要申请退款",
+})
+EXPLICIT_RISK_TOPICS: dict[str, ReplyResultTopic] = {
+    **dict.fromkeys(EXPLICIT_REFUND_REQUESTS, "refund_request"),
+    "我要投诉": "complaint",
+    "我要投诉你们": "complaint",
+    "请帮我提交投诉": "complaint",
+    "我被重复扣款了": "payment_dispute",
+    "我被扣了两次款": "payment_dispute",
+    "请帮我处理重复扣款": "payment_dispute",
+    "我已经付款了但订单显示未支付": "payment_dispute",
+}
+RULE_TOPICS: dict[str, ReplyResultTopic] = {
+    "refund-rule-v1": "refund_request",
+    "complaint-rule-v1": "complaint",
+    "payment-dispute-rule-v1": "payment_dispute",
+    "product-clarification-v1": "product_clarification",
+}
+RULE_NAMES = {topic: name for name, topic in RULE_TOPICS.items()}
+
+
+def build_rule_reply(topic: ReplyResultTopic) -> ModelReply:
+    return ModelReply(
+        text=render_business_reply(product=None, topics=[topic]),
+        topics=[topic],
+        model_name=RULE_NAMES[topic],
+        mode="rule",
+    )
 
 
 class SalesTurnEngine:
@@ -115,12 +151,18 @@ class SalesTurnEngine:
                 "knowledge_not_published"
             )
 
+        if not product.is_active():
+            raise ProductKnowledgeNotFoundError("Published product knowledge not found")
+
         plan = self.gateway.generate(
             messages=messages,
             product=product,
             tool_call=tool_call,
             memories=memories,
         )
+
+        if not product.is_active():
+            raise ProductKnowledgeNotFoundError("Published product knowledge not found")
 
         expected_reference = (
             product.knowledge_id,
@@ -136,7 +178,12 @@ class SalesTurnEngine:
                 "model_knowledge_mismatch"
             )
 
-        text = render_business_reply(
+        model_text = render_model_reply_text(
+            draft=plan.draft.reply_text,
+            product=product,
+            topics=plan.draft.topics,
+        )
+        text = model_text or render_business_reply(
             product=product,
             topics=plan.draft.topics,
         )
@@ -146,6 +193,7 @@ class SalesTurnEngine:
             topics=plan.draft.topics,
             model_name=plan.model_name,
             mode=plan.mode,
+            text_source="model" if model_text is not None else "template",
             knowledge_id=product.knowledge_id,
             knowledge_revision=product.revision,
         )
@@ -154,11 +202,29 @@ class SalesTurnEngine:
             self,
             *,
             messages: list[ModelMessage],
-            product_id: str,
+            product_id: str | None,
             tools: SalesToolExecutor,
             memories: tuple[ConfirmedFactSnapshot, ...] = (),
     ) -> SalesTurnResult:
         trace: list[TurnTraceStep] = []
+        rule_topic = None
+        if messages and messages[-1].role == "user":
+            latest = messages[-1].content.strip().rstrip("。！!").strip()
+            rule_topic = EXPLICIT_RISK_TOPICS.get(latest)
+        if rule_topic is None and product_id is None:
+            rule_topic = "product_clarification"
+        if rule_topic is not None:
+            reply = run_traced_step(
+                trace=trace,
+                step=f"rule_{rule_topic}",
+                operation=lambda: build_rule_reply(rule_topic),
+            )
+            return SalesTurnResult(
+                reply=reply,
+                retrieved_knowledge=None,
+                trace=trace,
+            )
+
         # 第一次模型调用：提出查询请求。
         call = run_traced_step(
             trace=trace,

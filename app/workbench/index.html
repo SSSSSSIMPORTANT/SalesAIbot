@@ -4,10 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>销售工作台 · SalesAIbot</title>
-  <link rel="stylesheet" href="./workbench.css?v=3">
+  <link rel="stylesheet" href="./workbench.css?v=4">
   <script src="./screenshot-import.js?v=2" defer></script>
   <script src="./suggestion-outcome.js?v=1" defer></script>
-  <script src="./workbench.js?v=4" defer></script>
+  <script src="./handoffs.js?v=1" defer></script>
+  <script src="./workbench.js?v=5" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -70,6 +71,21 @@
       <p id="status" class="status" role="status">正在连接工作台…</p>
       <p id="logout-feedback" class="feedback status" role="status" hidden></p>
 
+      <details id="handoff-panel" class="panel screenshot-panel" hidden>
+        <summary class="section-heading">人工处理任务 <span id="handoff-count" class="count"></span></summary>
+        <p id="handoff-feedback" class="empty feedback" role="status" hidden></p>
+        <form id="handoff-form" class="workbench-form" hidden>
+          <p id="handoff-source" class="feedback"></p>
+          <label for="handoff-reason">处理原因</label>
+          <select id="handoff-reason"></select>
+          <div class="actions">
+            <button id="handoff-submit" class="primary-button" type="submit">确认创建任务</button>
+            <button id="handoff-cancel" class="secondary-button" type="button">取消</button>
+          </div>
+        </form>
+        <ol id="handoff-list" class="cards" aria-label="人工处理任务"></ol>
+      </details>
+
       <details id="screenshot-import" class="panel screenshot-panel" hidden>
         <summary class="section-heading">截图识别</summary>
         <div class="workbench-form">
@@ -130,6 +146,7 @@
             <div class="actions">
               <button id="generate-suggestion" class="primary-button" type="submit" disabled>生成建议</button>
               <button id="check-generation" class="secondary-button" type="button" hidden>查询生成状态</button>
+              <button id="generation-handoff" class="secondary-button" type="button" hidden>创建人工任务</button>
             </div>
             <p id="generation-feedback" class="feedback" role="status" hidden></p>
           </form>

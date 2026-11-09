@@ -182,7 +182,11 @@ def test_model_failure_is_recorded_and_same_key_does_not_retry(
     monkeypatch.setattr(MockModelGateway, stage, fail)
     first = client.post(f"{url}/suggestions", json=generation_body())
     assert first.status_code == 503
-    assert first.json()["detail"] == "model_timeout"
+    detail = first.json()["detail"]
+    assert detail["code"] == "model_timeout"
+    assert detail["routing"]["action"] == "human_handoff"
+    assert detail["routing"]["handoff_reason"] == "model_unavailable"
+    assert detail["source_message_id"] == client.get(f"{url}/messages").json()[-1]["id"]
     counts_after_failure = dict(model_calls)
 
     retry = client.post(f"{url}/suggestions", json=generation_body())
@@ -193,7 +197,7 @@ def test_model_failure_is_recorded_and_same_key_does_not_retry(
 
     row = db.get(SuggestionGenerationRequest, (conversation_id, "generate-001"))
     assert row.status == "failed"
-    assert row.error_code == "generation_http_503"
+    assert row.error_code == "model_timeout"
     assert row.suggestion_id is None
     assert row.finished_at is not None
     db.rollback()

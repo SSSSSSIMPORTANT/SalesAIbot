@@ -36,6 +36,7 @@ let selectedId = null;
 let detailRequestId = 0;
 let currentVersion = null;
 let latestActor = null;
+let latestMessageId = null;
 let suggestionsPaused = null;
 let refreshing = false;
 let creating = false;
@@ -284,7 +285,9 @@ function renderCards(id, countId, rows, renderRow, emptyText) {
 function clearDetails(emptyText) {
   currentVersion = null;
   screenshotImport.renderContext();
+  handoffPanel.clear();
   latestActor = null;
+  latestMessageId = null;
   suggestionsPaused = null;
   suggestionViews.clear();
   versionLabel.hidden = true;
@@ -375,7 +378,8 @@ function getMessageDraft(conversationId) {
 
 function setMessageSources(conversationId, suggestions) {
   const options = suggestions.map(suggestion => {
-    const name = suggestion.generation_snapshot?.retrieved_knowledge?.name || suggestion.product_id;
+    const name = suggestion.generation_snapshot?.retrieved_knowledge?.name ||
+      suggestion.product_id || "未指定课程";
     return new Option(
       `${name} · 版本 ${suggestion.based_on_version} · ${suggestion.id.slice(0, 8)}`,
       suggestion.id,
@@ -561,7 +565,8 @@ function getGeneration(conversationId) {
   if (!generations.has(conversationId)) {
     const storageKey = scopedKey("pending-generation", conversationId);
     const stored = readStored(storageKey);
-    const pending = typeof stored?.request_key === "string" && typeof stored.product_id === "string" &&
+    const pending = typeof stored?.request_key === "string" &&
+      (typeof stored.product_id === "string" || stored.product_id === null) &&
       Number.isInteger(stored.based_on_version) ? stored : null;
     generations.set(conversationId, {
       storageKey,
@@ -579,7 +584,11 @@ function renderGenerationForm() {
 
   const state = getGeneration(conversation.id);
   const manual = productMode === "manual";
-  const selectedProduct = state.pending?.product_id ?? state.productId;
+  if (!state.pending && productMode === "catalog" &&
+      !products.some(row => row.product_id === state.productId)) {
+    state.productId = "";
+  }
+  const selectedProduct = state.pending ? state.pending.product_id ?? "" : state.productId;
   const locked = Boolean(state.pending) || state.busy;
   byId("product-label").htmlFor = manual ? "product-id" : "product-select";
   byId("product-label").textContent = manual ? "课程 ID" : "课程";
@@ -590,20 +599,25 @@ function renderGenerationForm() {
   productInput.readOnly = locked;
   if (productInput.value !== selectedProduct) productInput.value = selectedProduct;
 
-  const hasProduct = manual ? Boolean(state.productId.trim()) :
-    productMode === "catalog" && products.some(row => row.product_id === state.productId);
   generateButton.disabled = state.busy || suggestionsPaused === true ||
     getAssistanceAction(conversation.id).busy || (state.pending ? state.running : (
-    !hasProduct || currentVersion === null || latestActor !== "customer"
+    productMode === "loading" || currentVersion === null || latestActor !== "customer"
   ));
   generateButton.textContent = state.busy ? "处理中…" : state.pending ? "重试同一次生成" : "生成建议";
   checkGenerationButton.hidden = !state.pending;
   checkGenerationButton.disabled = state.busy;
+  const failureAction = byId("generation-handoff");
+  failureAction.hidden = !state.handoffMessageId || state.handoffMessageId !== latestMessageId ||
+    state.handoffVersion !== currentVersion;
+  failureAction.disabled = state.busy;
 
   const hints = [];
   if (productMode === "loading") hints.push("正在加载课程列表…");
   if (manual) hints.push("课程列表暂不可用，可手动输入课程 ID。");
   if (productMode === "catalog" && products.length === 0) hints.push("暂无已发布课程。");
+  if (!selectedProduct && productMode !== "loading") {
+    hints.push("课程留空时，普通咨询会先生成澄清问题。");
+  }
   if (suggestionsPaused) {
     hints.push("AI 建议已暂停，恢复后可生成新建议。");
   } else if (!state.pending && currentVersion !== null && latestActor !== "customer") {
@@ -618,6 +632,7 @@ function finishGeneration(state, feedback, error = false) {
   state.running = false;
   state.feedback = feedback;
   state.error = error;
+  state.handoffMessageId = null;
   writeStored(state.storageKey, null);
 }
 
@@ -636,7 +651,18 @@ async function inspectGeneration(conversationId, state, releaseMissing = false) 
       return true;
     }
     if (row.status === "failed") {
-      finishGeneration(state, "本次生成失败。请检查课程和最新消息后重新生成。", true);
+      const handoff = ["model_timeout", "model_unavailable"].includes(row.error_code);
+      const version = state.pending.based_on_version;
+      const messageId = selectedId === conversationId && currentVersion === version ? latestMessageId : null;
+      const message = row.error_code === "model_timeout"
+        ? "模型响应超时，可重试生成或创建人工任务。"
+        : handoff ? "本轮暂时无法生成可靠建议，可重试或创建人工任务。"
+          : "本次生成失败。请检查课程和最新消息后重新生成。";
+      finishGeneration(state, message, true);
+      if (handoff && messageId) {
+        state.handoffMessageId = messageId;
+        state.handoffVersion = version;
+      }
       return true;
     }
     throw new Error("Invalid generation state");
@@ -669,8 +695,9 @@ async function runGeneration(checkOnly) {
       return;
     }
     state.pending = {
-      request_key: crypto.randomUUID(), based_on_version: currentVersion, product_id: productId,
+      request_key: crypto.randomUUID(), based_on_version: currentVersion, product_id: productId || null,
     };
+    state.handoffMessageId = null;
     writeStored(state.storageKey, state.pending);
   }
 
@@ -838,13 +865,21 @@ async function copySuggestion(conversationId, suggestionId) {
 }
 
 function renderSuggestion(conversationId, row) {
-  const knowledge = row.generation_snapshot?.retrieved_knowledge;
+  const snapshot = row.generation_snapshot;
+  const knowledge = snapshot?.retrieved_knowledge;
+  const routing = snapshot?.routing;
   const source = knowledge ? ` · 资料 ${knowledge.knowledge_id} · ${knowledge.revision}` : "";
   const card = createCard(
-    "suggestion", knowledge?.name || row.product_id, row.created_at, row.reply_text,
+    "suggestion", knowledge?.name || row.product_id || "未指定课程", row.created_at, row.reply_text,
     `生成时版本 ${row.based_on_version} · 建议 ${row.id.slice(0, 8)}${source}`,
   );
   if (knowledge?.source) card.append(element("p", "card-note", `来源 ${knowledge.source}`));
+  if (routing?.action === "clarify_product") {
+    card.append(element("p", "card-note routing-note", "下一步 · 确认客户咨询的课程"));
+  } else if (routing?.action === "human_handoff") {
+    const risks = routing.risk_flags.map(reason => handoffReasons[reason] ?? reason).join("、");
+    card.append(element("p", "card-note routing-note", `建议人工处理 · ${risks}`));
+  }
 
   const state = getSuggestionAction(row.id);
   const status = element("p", "feedback suggestion-status");
@@ -866,6 +901,14 @@ function renderSuggestion(conversationId, row) {
     await outcome.refresh();
   });
   actions.append(check, copy);
+  if (routing?.action === "human_handoff" && snapshot.source_message_id) {
+    const handoff = element("button", "secondary-button", "创建人工任务");
+    handoff.type = "button";
+    handoff.addEventListener("click", () =>
+      handoffPanel.open(snapshot.source_message_id, routing.handoff_reason)
+    );
+    actions.append(handoff);
+  }
   card.append(status, actions, outcome.panel, feedback);
 
   const draw = () => {
@@ -922,9 +965,18 @@ function renderMessage(row) {
     row.adoption_mode === "edited" ? "改写后采用" : "";
   const note = adoption && row.source_suggestion_id
     ? `${adoption} · 建议 ${row.source_suggestion_id.slice(0, 8)}` : "";
-  return createCard(
+  const card = createCard(
     row.actor, row.actor === "customer" ? "客户" : "人工销售", row.created_at, row.text, note,
   );
+  if (row.actor === "customer") {
+    const actions = element("div", "actions suggestion-actions");
+    const handoff = element("button", "secondary-button", "人工任务");
+    handoff.type = "button";
+    handoff.addEventListener("click", () => handoffPanel.open(row.id));
+    actions.append(handoff);
+    card.append(actions);
+  }
+  return card;
 }
 
 async function loadDetails(conversation) {
@@ -942,10 +994,11 @@ async function loadDetails(conversation) {
   const base = conversationURL(conversation.id);
 
   try {
-    const [details, messages, suggestions] = await Promise.all([
+    const [details, messages, suggestions, handoffs] = await Promise.all([
       getJSON(base),
       getJSON(`${base}/messages`),
       getJSON(`${base}/suggestions`),
+      getJSON(`${base}/handoffs`).catch(() => null),
     ]);
     if (requestId !== detailRequestId) return;
 
@@ -953,12 +1006,14 @@ async function loadDetails(conversation) {
     currentVersion = details.version;
     screenshotImport.renderContext();
     latestActor = messages.at(-1)?.actor ?? null;
+    latestMessageId = messages.at(-1)?.id ?? null;
     suggestionsPaused = details.suggestions_paused;
     versionLabel.textContent = `当前版本 ${details.version}`;
     versionLabel.hidden = false;
     renderCards("messages", "message-count", messages, renderMessage, "这个会话还没有消息。");
     renderCards("suggestions", "suggestion-count", suggestions,
       row => renderSuggestion(conversation.id, row), "这个会话还没有建议。");
+    handoffPanel.load(conversation.id, handoffs);
     setMessageSources(conversation.id, suggestions);
     renderMessageForm();
     renderAssistance();
@@ -1069,6 +1124,15 @@ generationForm.addEventListener("submit", event => {
   return runGeneration(false);
 });
 checkGenerationButton.addEventListener("click", () => runGeneration(true));
+byId("generation-handoff").addEventListener("click", () => {
+  const conversation = currentConversation();
+  if (!conversation) return;
+  const state = getGeneration(conversation.id);
+  if (state.handoffMessageId === latestMessageId && state.handoffVersion === currentVersion) {
+    handoffPanel.open(state.handoffMessageId, "model_unavailable");
+  }
+});
+const handoffPanel = createHandoffPanel();
 const screenshotImport = createScreenshotImport({
   getContext: () => ({
     operatorId: operator?.id ?? null,
